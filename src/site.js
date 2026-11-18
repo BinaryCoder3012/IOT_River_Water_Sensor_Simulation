@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { gsap } from 'gsap';
-import { buildNode, RAIL_LOCAL, setWiresPlaced } from './node.js';
+import { buildNode, buildGateway, GW_ANT_TIP, RAIL_LOCAL, setWiresPlaced } from './node.js';
 import { canvasTex, mat } from './parts.js';
 import { CONFIG, LEVELS } from './data.js';
 
@@ -267,14 +267,19 @@ export function buildSite() {
   const roof = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.4, 9.4), mat(0x9a948a));
   roof.position.set(bx, by + 12.2, bz);
   root.add(roof);
-  const gwBox = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), mat(0xf0f0f0));
-  gwBox.position.set(bx + 5, by + 12.6, bz + 3.8);
-  root.add(gwBox);
-  const gwAnt = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9), mat(0x222222));
-  gwAnt.position.set(bx + 5, by + 13.2, bz + 3.8);
-  root.add(gwAnt);
-  const gwTip = gwAnt.position.clone().add(new THREE.Vector3(0, 0.45, 0));
-  const gwl = label('<b>Gateway</b><br><small>ESP32 + Ra-02 · Wi-Fi bridge · roof, line of sight</small>', 'lbl lbl-site');
+  const GW_SCALE = 0.06;
+  const gateway = buildGateway({ edges: false });
+  gateway.root.scale.setScalar(GW_SCALE);
+  gateway.root.rotation.y = Math.PI / 4;
+  gateway.root.position.set(bx + 4, by + 12.4, bz + 2.6);
+  root.add(gateway.root);
+  gateway.root.updateMatrixWorld(true);
+  const gwTip = GW_ANT_TIP.clone().applyMatrix4(gateway.root.matrixWorld);
+  const gwRing = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.85, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
+  gwRing.rotation.x = -Math.PI / 2;
+  gwRing.position.copy(gateway.root.position).add(new THREE.Vector3(-0.25, 0.03, 0.25));
+  root.add(gwRing);
+  const gwl = label('<b>Gateway / receiver</b> · <u>click to inspect</u><br><small>ESP32 + Ra-02 · Wi-Fi bridge · roof, line of sight</small>', 'lbl lbl-site');
   gwl.position.copy(gwTip).add(new THREE.Vector3(0, 1.2, 0));
   root.add(gwl);
   const cloudPos = gwTip.clone().add(new THREE.Vector3(-4, 9, 0));
@@ -405,9 +410,12 @@ export function buildSite() {
   }
 
   function update(t, camera) {
+    const k = (t % 1.6) / 1.6;
+    gwRing.scale.setScalar(1 + k * 0.6);
+    gwRing.material.opacity = 0.7 * (1 - k);
     waterMat.uniforms.uTime.value = t;
     waterMat.uniforms.uCam.value.copy(camera.position);
   }
 
-  return { root, node, setStage, ping, transmit, update, sensor, H, state, thrLabels };
+  return { root, node, gateway, setStage, ping, transmit, update, sensor, H, state, thrLabels };
 }

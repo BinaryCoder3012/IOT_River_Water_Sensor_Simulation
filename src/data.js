@@ -88,3 +88,20 @@ export const WIRES = [
 ];
 
 export const WIRE_COLORS = { r: 0xe63946, k: 0x1d1d1f, b: 0x2f80ed, y: 0xf4c430 };
+
+// Gateway-only items (docs 1.4.2 / 1.10)
+export const GW_INFO = {
+  adapter: { id: 'adapter', name: '5 V USB adapter + cable', qty: '1', cat: 'Power', use: 'Powers the gateway ESP32 through its USB port. Put it on a UPS so the gateway keeps working during storm power cuts.', spec: '5 V >= 1 A · micro-USB cable through a PG7 gland', note: 'The gateway needs a 2.4 GHz Wi-Fi network: the ESP32 has no 5 GHz radio.' },
+};
+
+export const GW_WIRES = [
+  ['Ra-02 3.3V', 'ESP32 3V3', 'r', '0.1 µF + 10 µF at the Ra-02'],
+  ['Ra-02 GND', 'ESP32 GND', 'k', ''],
+  ['Ra-02 SCK', 'GPIO18', 'b', 'VSPI'],
+  ['Ra-02 MISO', 'GPIO19', 'b', 'VSPI'],
+  ['Ra-02 MOSI', 'GPIO23', 'b', 'VSPI'],
+  ['Ra-02 NSS', 'GPIO5', 'y', 'chip select'],
+  ['Ra-02 RESET', 'GPIO14', 'y', ''],
+  ['Ra-02 DIO0', 'GPIO26', 'y', 'RxDone IRQ'],
+  ['ESP32 USB', '5 V adapter', 'k', '>= 1 A, on a UPS if possible'],
+];

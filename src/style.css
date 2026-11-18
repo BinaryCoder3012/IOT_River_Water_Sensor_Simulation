@@ -177,3 +177,25 @@ body.mode-site #hint { color: #2c3e50; }
   #titleblock, #hint { display: none; }
   #card { top: auto; bottom: 50%; width: auto; left: 14px; }
 }
+
+/* ------------------------------------------------------------ sidebar toggle */
+#side { transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.35s; }
+#toolbar, #hint, #sideToggle { transition: left 0.45s cubic-bezier(0.65, 0, 0.35, 1); }
+#sideToggle {
+  all: unset; position: fixed; top: 14px; left: 382px; z-index: 6; width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; cursor: pointer; color: #c9d6e3; background: var(--panel);
+  border: 1px solid var(--line); backdrop-filter: blur(10px);
+}
+#sideToggle:hover { color: #fff; border-color: var(--line-strong); }
+#sideToggle .chev { transition: transform 0.3s; transform-origin: 14.5px 12px; }
+#toolbar { left: 426px; }
+#hint { left: 426px; }
+.side-off #side { transform: translateX(calc(-100% - 30px)); opacity: 0; pointer-events: none; }
+.side-off #sideToggle { left: 14px; }
+.side-off #sideToggle .chev { transform: scaleX(-1); }
+.side-off #toolbar, .side-off #hint { left: 58px; }
+@media (max-width: 900px) {
+  #sideToggle { left: 14px; }
+  #toolbar { left: 58px; }
+  .side-off #side { transform: translateY(calc(100% + 30px)); }
+}

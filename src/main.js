@@ -3,10 +3,11 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { gsap } from 'gsap';
-import { buildNode, setWiresPlaced } from './node.js';
+import { buildNode, buildGateway, setWiresPlaced } from './node.js';
 import { buildSite } from './site.js';
 import { canvasTex } from './parts.js';
-import { BOM, BOM_BY_ID, STEPS, WIRES, WIRE_COLORS, CONFIG, LEVELS } from './data.js';
+import { BOM, BOM_BY_ID, STEPS, WIRES, WIRE_COLORS, CONFIG, LEVELS, GW_INFO, GW_WIRES } from './data.js';
+const INFO = { ...BOM_BY_ID, ...GW_INFO };
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -87,6 +88,10 @@ ws.add(shadowPlane);
 const node = buildNode();
 ws.add(node.root);
 const P = node.parts;
+const gw = buildGateway();
+gw.root.visible = false;
+ws.add(gw.root);
+let gwF = 0;
 const partIds = Object.keys(P);
 const balloon = Object.fromEntries(BOM.map((b, i) => [b.id, i + 1]));
 
@@ -176,7 +181,7 @@ function eachMat(root, fn) {
 const view = { disp: 'shaded', edges: true, dims: true, mode: 'site', ghostShell: false };
 
 function applyDisplay() {
-  eachMat(node.root, (m) => {
+  [node.root, gw.root].forEach((r) => eachMat(r, (m) => {
     m.wireframe = view.disp === 'wire';
     let op = m.userData.baseOpacity ?? 1;
     if (view.disp === 'xray') op = Math.min(op, 0.28);
@@ -188,11 +193,12 @@ function applyDisplay() {
     m.depthWrite = op >= 1;
     m.clippingPlanes = section.on ? [section.plane] : null;
     m.needsUpdate = true;
-  });
+  }));
+  gw.edgeMat.visible = view.edges && view.disp !== 'wire';
   node.edgeMat.visible = view.edges && view.disp !== 'wire';
   node.edgeMat.clippingPlanes = section.on ? [section.plane] : null;
   node.edgeMat.needsUpdate = true;
-  dims.visible = view.dims && ['explode', 'assembly'].includes(view.mode);
+  dims.visible = view.dims && ['explode', 'assembly', 'gateway'].includes(view.mode);
   dims.traverse((o) => o.isCSS2DObject && (o.visible = dims.visible));
   secMesh.visible = section.on;
 }
@@ -289,6 +295,7 @@ const CAM = {
   explode: [V(46, 44, 70), V(-8, 13, -2)],
   assembly: [V(18, 58, 52), V(-8, 4, -22)],
   wiring: [V(-1.5, 18, 6.5), V(-1.5, 3.6, -1.6)],
+  gateway: [V(26, 26, 34), V(-7, 4, -1)],
 };
 
 // ================================================================ simulation (site)
@@ -377,11 +384,12 @@ function liveStage() {
 // ================================================================ UI panels
 const panel = $('#panel');
 const SHEETS = {
-  site: ['SITE & OPERATION', '1:100 (node 4×)', 'm', '1 / 5'],
-  bom: ['RAW MATERIALS · BOM', '1:2', 'cm', '2 / 5'],
-  explode: ['EXPLODED ASSEMBLY', '1:2', 'mm (dims)', '3 / 5'],
-  assembly: ['ASSEMBLY SEQUENCE', '1:2', 'cm', '4 / 5'],
-  wiring: ['WIRING · NODE CARRIER', '2:1', 'cm', '5 / 5'],
+  site: ['SITE & OPERATION', '1:100 (node 4×)', 'm', '1 / 6'],
+  bom: ['RAW MATERIALS · BOM', '1:2', 'cm', '2 / 6'],
+  explode: ['EXPLODED ASSEMBLY', '1:2', 'mm (dims)', '3 / 6'],
+  assembly: ['ASSEMBLY SEQUENCE', '1:2', 'cm', '4 / 6'],
+  wiring: ['WIRING · NODE CARRIER', '2:1', 'cm', '5 / 6'],
+  gateway: ['GATEWAY · RECEIVER NODE', '1:2', 'cm', '6 / 6'],
 };
 
 function bomList() {
@@ -439,7 +447,8 @@ function renderSite() {
       <button class="btn" data-cam="gauge">Staff gauge</button>
       <button class="btn" data-cam="link">LoRa link</button>
       <button class="btn" data-cam="wide">River overview</button>
-    </div>`;
+    </div>
+    <div class="btns"><button class="btn primary" id="toGw">Inspect gateway / receiver ▸</button></div>`;
   $('#stage').oninput = (e) => {
     stopFlood();
     site.setStage(+e.target.value);
@@ -456,6 +465,7 @@ function renderSite() {
     wide: [V(34, 20, 44), V(-6, 2, -8)],
   };
   $$('[data-cam]').forEach((b) => (b.onclick = () => flyTo(...cams[b.dataset.cam])));
+  $('#toGw').onclick = () => setMode('gateway');
   updateHud();
   liveStage();
   log('node boot · RiverMon fw · SF9 434.2 MHz · cfg_ver 3');
@@ -688,7 +698,52 @@ function traceWire(i) {
 }
 
 // ================================================================ mode switching
-const RENDER = { site: renderSite, bom: renderBom, explode: renderExplode, assembly: renderAssembly, wiring: renderWiring };
+function renderGateway() {
+  const C = { r: '#e63946', k: '#3a3a3f', b: '#2f80ed', y: '#f4c430' };
+  panel.innerHTML = `
+    <h2>Gateway / receiver node</h2>
+    <p>A second ESP32 DevKit + SX1278 Ra-02 on the same carrier layout, with the US-100 and power parts left unpopulated. It runs from a 5 V USB adapter and sits as high as possible with line of sight to the river (top-floor window or roof).</p>
+    <div class="stat-grid">
+      <div class="stat"><i>Radio</i><b>434.2 MHz</b></div>
+      <div class="stat"><i>Mode</i><b>SF9 · RX</b></div>
+      <div class="stat"><i>ACK after</i><b>60 ms</b></div>
+      <div class="stat"><i>Uplink</i><b>Wi-Fi 2.4G</b></div>
+    </div>
+    <h3>What it does</h3>
+    <p class="muted">Listens continuously on core 0, checks the 4-byte MIC and frame counter, decrypts the AES-128 payload and answers every frame with an ACK carrying any pending config. Core 1 forwards JSON over Wi-Fi/HTTP to the FastAPI backend with an outage queue and NTP time-stamps, so slow Wi-Fi never delays an ACK. Status page: <b>http://rivermon-gw.local/</b></p>
+    <h3>Explode</h3>
+    <input id="gwEx" type="range" min="0" max="1.3" step="0.01" value="${gwF}">
+    <div class="btns"><button class="btn primary" id="gwAnim">▶ Explode / collapse</button><button class="btn" id="gwBack">← Back to site</button></div>
+    <h3>Wiring · docs 1.4.2</h3>
+    <table class="wtable">${GW_WIRES.map(([a, b, c, n]) => `<tr title="${n}"><td><span class="sw" style="background:${C[c]}"></span></td><td>${a}</td><td class="pin">→ ${b}</td></tr>`).join('')}</table>
+    <p class="muted" style="margin-top:8px">Click any part in 3D for details.</p>`;
+  const setF = (f) => {
+    gwF = f;
+    Object.values(gw.parts).forEach((p) => p.group.position.copy(p.home.pos).addScaledVector(p.explode, f));
+  };
+  $('#gwEx').oninput = (e) => {
+    motion.kill();
+    setF(+e.target.value);
+  };
+  $('#gwAnim').onclick = () => {
+    motion.kill();
+    const o = { f: gwF };
+    const to = gwF > 0.5 ? 0 : 1;
+    motion = gsap.timeline();
+    motion.to(o, {
+      f: to,
+      duration: 1.3,
+      ease: 'power3.inOut',
+      onUpdate: () => {
+        setF(o.f);
+        $('#gwEx').value = o.f;
+      },
+    });
+  };
+  $('#gwBack').onclick = () => setMode('site');
+}
+
+const RENDER = { site: renderSite, bom: renderBom, explode: renderExplode, assembly: renderAssembly, wiring: renderWiring, gateway: renderGateway };
 function setMode(mode) {
   const prevMode = view.mode;
   view.mode = mode;
@@ -705,6 +760,8 @@ function setMode(mode) {
 
   const isSite = mode === 'site';
   ws.visible = !isSite;
+  node.root.visible = mode !== 'gateway';
+  gw.root.visible = mode === 'gateway';
   wsLights.visible = !isSite;
   site.root.visible = isSite;
   siteLights.visible = isSite;
@@ -731,13 +788,15 @@ function setMode(mode) {
     setWiresPlaced(node, placed.has('wires'));
     loomFull();
     partIds.forEach((id, i) => id !== 'wires' && motion.add(tweenTo(id, placed.has(id) ? homeOf(id) : trayOf(id), 1.2), i * 0.02));
+  } else if (mode === 'gateway') {
+    Object.values(gw.parts).forEach((p) => p.group.position.copy(p.home.pos).addScaledVector(p.explode, gwF));
   } else if (mode === 'wiring') {
     setWiresPlaced(node, true);
     loomFull();
     ['lid', 'panel', 'bracket', 'clamp', 'holder', 'cell'].forEach((id) => (P[id].group.visible = false));
     partIds.forEach((id) => id !== 'wires' && motion.add(tweenTo(id, homeOf(id), 1.0), 0));
   }
-  view.ghostShell = ['assembly', 'wiring'].includes(mode);
+  view.ghostShell = ['assembly', 'wiring', 'gateway'].includes(mode);
   applyDisplay();
 
   if (prevMode !== mode || mode === 'site') {
@@ -753,6 +812,23 @@ function setMode(mode) {
   RENDER[mode]();
 }
 $$('#tabs button').forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
+
+// sidebar show / hide (button or "[" key), remembered per browser
+function toggleSide(force) {
+  const hide = force ?? !document.documentElement.classList.contains('side-off');
+  document.documentElement.classList.toggle('side-off', hide);
+  $('#sideToggle').title = hide ? 'Show sidebar  [' : 'Hide sidebar  [';
+  try {
+    localStorage.setItem('rm-side-off', hide ? '1' : '0');
+  } catch (e) {}
+}
+$('#sideToggle').onclick = () => toggleSide();
+addEventListener('keydown', (e) => {
+  if (e.key === '[' && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) toggleSide();
+});
+try {
+  if (localStorage.getItem('rm-side-off') === '1') toggleSide(true);
+} catch (e) {}
 
 // ================================================================ toolbar
 $$('[data-view]').forEach((b) => {
@@ -822,7 +898,8 @@ let hovered = null;
 function pickPart(ev) {
   ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const root = view.mode === 'site' ? site.node.root : node.root;
+  if (view.mode === 'site' && ray.intersectObject(site.gateway.root, true).length) return '__gateway';
+  const root = view.mode === 'site' ? site.node.root : view.mode === 'gateway' ? gw.root : node.root;
   const hits = ray.intersectObject(root, true);
   for (const h of hits) {
     if (!h.object.visible || h.object.isLineSegments) continue;
@@ -839,9 +916,10 @@ function select(id) {
   selected = id;
   setHighlight(id ? [id] : []);
   if (!id) return closeCard();
-  const b = BOM_BY_ID[id];
+  const b = INFO[id];
+  if (!b) return closeCard();
   const card = $('#card');
-  card.innerHTML = `<span class="x">×</span><div class="cat">${b.cat} · item ${balloon[id]}</div><h3>${b.name}</h3>
+  card.innerHTML = `<span class="x">×</span><div class="cat">${b.cat}${balloon[id] ? ` · item ${balloon[id]}` : ' · gateway'}</div><h3>${b.name}</h3>
     <dl><dt>Qty</dt><dd>${b.qty}</dd><dt>Role</dt><dd>${b.use}</dd><dt>Spec</dt><dd>${b.spec}</dd></dl>
     ${b.note ? `<div class="note">${b.note}</div>` : ''}`;
   card.classList.remove('hidden');
@@ -857,6 +935,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => (down = [e.clientX, e
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
   const id = pickPart(e);
+  if (id === '__gateway') return setMode('gateway');
   select(id);
 });
 let lastMove = null;
@@ -898,7 +977,7 @@ renderer.setAnimationLoop(() => {
     if (id !== hovered) {
       hovered = id;
       renderer.domElement.style.cursor = id ? 'pointer' : '';
-      if (view.mode !== 'assembly') setHighlight([selected, hovered].filter(Boolean));
+      if (!['assembly', 'gateway'].includes(view.mode) && id !== '__gateway') setHighlight([selected, hovered].filter(Boolean));
     }
   }
   renderer.render(scene, camera);

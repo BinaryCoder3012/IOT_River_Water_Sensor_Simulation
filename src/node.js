@@ -50,6 +50,28 @@ function addEdges(group) {
   });
 }
 
+
+function finalize(root, parts, edges) {
+  if (edges) Object.values(parts).forEach((p) => addEdges(p.group));
+
+  // give every mesh its own material instance so highlight / x-ray stay per part
+  root.traverse((o) => {
+    if (o.isMesh) {
+      o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach((m) => {
+        m.userData.baseOpacity = m.opacity;
+        m.userData.baseTransparent = m.transparent;
+        m.userData.baseEmissive = m.emissive ? m.emissive.getHex() : 0;
+        m.userData.baseEmissiveIntensity = m.emissiveIntensity;
+      });
+      o.castShadow = true;
+      o.receiveShadow = true;
+    }
+  });
+
+}
+
 export function buildNode({ edges = true } = {}) {
   const root = new THREE.Group();
   root.name = 'node';
@@ -190,23 +212,7 @@ export function buildNode({ edges = true } = {}) {
   parts.wires.home.pos.set(0, 0, 0);
   parts.wires.tray.pos.set(0, 0, 0);
 
-  if (edges) Object.values(parts).forEach((p) => addEdges(p.group));
-
-  // give every mesh its own material instance so highlight / x-ray stay per part
-  root.traverse((o) => {
-    if (o.isMesh) {
-      o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
-      const ms = Array.isArray(o.material) ? o.material : [o.material];
-      ms.forEach((m) => {
-        m.userData.baseOpacity = m.opacity;
-        m.userData.baseTransparent = m.transparent;
-        m.userData.baseEmissive = m.emissive ? m.emissive.getHex() : 0;
-        m.userData.baseEmissiveIntensity = m.emissiveIntensity;
-      });
-      o.castShadow = true;
-      o.receiveShadow = true;
-    }
-  });
+  finalize(root, parts, edges);
 
   return { root, parts, wires, loom, edgeMat };
 }
@@ -215,4 +221,94 @@ export function buildNode({ edges = true } = {}) {
 export function setWiresPlaced(node, placed) {
   node.parts.wires.coil.visible = !placed;
   node.parts.wires.loom.visible = placed;
+}
+
+// ------------------------------------------------------------------ gateway
+// Second ESP32 + Ra-02 on the same carrier layout (power parts unpopulated),
+// USB-powered from a 5 V adapter, in the same IP65 box. Guide section 1.4.2 / 1.10.
+function usbAdapter() {
+  const g = new THREE.Group();
+  const white = P.mat(0xf2f2f0, { rough: 0.5 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.0, 3.2), white);
+  body.position.y = 1.5;
+  g.add(body);
+  const port = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 1.3), P.mat(0x222222));
+  port.position.set(2.15, 1.6, 0);
+  g.add(port);
+  for (const z of [-0.6, 0.6]) {
+    const pin = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.8, 12), P.mat(0xc9ccd1, { metal: 0.9, rough: 0.3 }));
+    pin.rotation.z = Math.PI / 2;
+    pin.position.set(-3.0, 1.5, z);
+    g.add(pin);
+  }
+  const lbl = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.2), P.mat(0xffffff, { map: P.canvasTex(256, 120, (c, w, h) => {
+    c.fillStyle = '#f2f2f0'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#333'; c.font = 'bold 34px sans-serif'; c.fillText('5V ⎓ 2A', 50, 55);
+    c.font = '22px sans-serif'; c.fillText('USB POWER', 62, 95);
+  }) }));
+  lbl.rotation.x = -Math.PI / 2;
+  lbl.position.set(0, 3.01, 0);
+  g.add(lbl);
+  return g;
+}
+
+const GW_LAYOUT = {
+  box: { make: P.enclosure, pos: v(0, 0, 0), ex: v(0, 0, 0) },
+  perf: { make: P.perfboard, pos: v(0, 3.0, BZ), ex: v(0, 5, 0) },
+  esp32: { make: P.esp32, pos: v(-0.6, 4.05, -0.7), ex: v(-1, 12, 0) },
+  ra02: { make: P.ra02, pos: v(3.55, 3.83, -0.7), ex: v(7, 11, 1) },
+  antenna: { make: P.springAntenna, pos: v(4.25, 3.95, -0.02), scale: v(1, 0.93, 1), ex: v(9, 16, 1) },
+  caps: { make: P.caps, pos: v(1.2, BY, -3.6), ex: v(3, 9, -8) },
+  gland: { make: P.gland, pos: v(-5.3, 5.2, -0.8), ex: v(-10, 0, 0) },
+  silica: { make: P.silica, pos: v(2.8, 0.45, 3.0), ex: v(6, -4, 9) },
+  lid: { make: P.lid, pos: v(0, 7.0, 0), ex: v(0, 17, 0) },
+  adapter: { make: usbAdapter, pos: v(-17, 0, -0.8), ex: v(-6, 0, 0) },
+};
+export const GW_ANT_TIP = v(4.25, 3.95 + 3.1 * 0.93, -0.02);
+
+export function buildGateway({ edges = true } = {}) {
+  const root = new THREE.Group();
+  root.name = 'gateway';
+  const parts = {};
+  for (const [id, L] of Object.entries(GW_LAYOUT)) {
+    const g = L.make();
+    g.name = id;
+    g.userData.partId = id;
+    if (L.scale) g.scale.copy(L.scale);
+    g.position.copy(L.pos);
+    root.add(g);
+    parts[id] = { id, group: g, home: { pos: L.pos.clone(), quat: new THREE.Quaternion() }, explode: L.ex.clone() };
+  }
+  // SPI + power loom Ra-02 <-> ESP32 (same pins as the node)
+  const esp = parts.esp32.home.pos;
+  const ra = parts.ra02.home.pos;
+  const espEnd = (pin) => {
+    const p = P.espPinLocal(pin);
+    return v(esp.x + p.x, BY + 0.03, esp.z + p.z + (p.z < 0 ? -0.38 : 0.38));
+  };
+  const raEnd = (pin) => {
+    const p = P.raPadLocal(pin);
+    return v(ra.x + p.x - 0.3, BY + 0.03, ra.z + p.z);
+  };
+  const defs = [['SCK', 'D18', 'b'], ['MISO', 'D19', 'b'], ['MOSI', 'D23', 'b'], ['NSS', 'D5', 'y'], ['RST', 'D14', 'y'], ['DIO0', 'D26', 'y'], ['3V3', '3V3', 'r'], ['GND', 'GND2', 'k']];
+  const loom = new THREE.Group();
+  loom.userData.partId = 'wires';
+  defs.forEach(([a, b, c], i) => {
+    const A = raEnd(a);
+    const B = espEnd(b);
+    const m1 = A.clone().lerp(B, 0.25);
+    const m2 = A.clone().lerp(B, 0.75);
+    m1.y = m2.y = Math.max(A.y, B.y) + 0.35 + A.distanceTo(B) * 0.12 + (i % 4) * 0.06;
+    const curve = new THREE.CatmullRomCurve3([A, A.clone().add(v(0, 0.2, 0)), m1, m2, B.clone().add(v(0, 0.2, 0)), B], false, 'centripetal');
+    loom.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.05, 6), P.mat(WIRE_COLORS[c], { rough: 0.45 })));
+  });
+  root.add(loom);
+  // USB cable: ESP32 micro-USB -> gland -> adapter (part of the adapter group)
+  const usbPort = v(esp.x - 2.85, esp.y + 0.23, esp.z);
+  const adP = parts.adapter.home.pos;
+  const pts = [usbPort, v(-4.2, 4.6, -0.75), v(-5.9, 5.2, -0.8), v(-8, 4.6, -1), v(-10, 1.0, 1.5), v(-12.5, 0.3, 1.8), v(adP.x + 2.6, 1.6, adP.z)];
+  const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => p.clone().sub(adP))), 80, 0.18, 8), P.mat(0x1a1b1f, { rough: 0.7 }));
+  parts.adapter.group.add(cable);
+  finalize(root, parts, edges);
+  return { root, parts, edgeMat };
 }
