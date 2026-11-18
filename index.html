@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RiverMon Node CAD</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body class="mode-site">
+    <div id="viewport"></div>
+
+    <aside id="side">
+      <header class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 32 32" width="30" height="30"><path d="M3 22c4-3 7-3 10 0s6 3 10 0 5-2 6-1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 4v9M12 8l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h1>RiverMon <span>CAD</span></h1>
+          <p>IoT river water-level node · LoRa 433 MHz</p>
+        </div>
+      </header>
+      <nav id="tabs">
+        <button data-mode="site" class="on"><b>01</b>Site &amp; operation</button>
+        <button data-mode="bom"><b>02</b>Raw materials</button>
+        <button data-mode="explode"><b>03</b>Exploded design</button>
+        <button data-mode="assembly"><b>04</b>Assembly</button>
+        <button data-mode="wiring"><b>05</b>Wiring</button>
+      </nav>
+      <section id="panel"></section>
+    </aside>
+
+    <div id="toolbar">
+      <div class="grp" data-ws>
+        <span class="cap">View</span>
+        <button data-view="iso" title="Isometric">ISO</button>
+        <button data-view="front" title="Front">FRT</button>
+        <button data-view="top" title="Top">TOP</button>
+        <button data-view="right" title="Right">RGT</button>
+      </div>
+      <div class="grp">
+        <span class="cap">Proj</span>
+        <button id="proj" title="Perspective / orthographic">PERSP</button>
+      </div>
+      <div class="grp" data-ws>
+        <span class="cap">Display</span>
+        <button data-disp="shaded" class="on">Shaded</button>
+        <button data-disp="xray">X-ray</button>
+        <button data-disp="wire">Wire</button>
+        <button id="edges" class="on" title="Feature edges">Edges</button>
+        <button id="dims" class="on" title="Dimensions">Dims</button>
+      </div>
+      <div class="grp" data-ws>
+        <button id="section" title="Section cut">Section</button>
+        <input id="sectionPos" type="range" min="-6" max="6" step="0.1" value="0" />
+      </div>
+      <div class="grp">
+        <button id="spin" title="Auto-rotate">⟳</button>
+      </div>
+    </div>
+
+    <div id="card" class="hidden"></div>
+
+    <div id="titleblock">
+      <div class="tb-row tb-title"><span id="tbSheet">SITE &amp; OPERATION</span></div>
+      <div class="tb-grid">
+        <div><i>Project</i>RiverMon: IoT river water-level monitoring over LoRa</div>
+        <div><i>Course</i>EIIT / TMT · INSTR F311 / F312</div>
+        <div><i>Drawn</i>Group-10 · BITS Pilani Hyd.</div>
+        <div><i>Units</i><span id="tbUnits">m</span></div>
+        <div><i>Scale</i><span id="tbScale">1:100 (node 4×)</span></div>
+        <div><i>Sheet</i><span id="tbNo">1 / 5</span></div>
+      </div>
+    </div>
+
+    <div id="hint">Drag to orbit · right-drag to pan · scroll to zoom · click a part for details</div>
+    <div id="loader"><div class="spin"></div>Building model…</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
