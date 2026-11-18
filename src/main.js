@@ -898,7 +898,12 @@ let hovered = null;
 function pickPart(ev) {
   ndc.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  if (view.mode === 'site' && ray.intersectObject(site.gateway.root, true).length) return '__gateway';
+  if (view.mode === 'site') {
+    // nearest hit wins, so the node/bridge in front still take priority over the building behind
+    const gwHit = ray.intersectObjects(site.gatewayTargets, true)[0];
+    const nodeHit = ray.intersectObject(site.node.root, true)[0];
+    if (gwHit && (!nodeHit || gwHit.distance < nodeHit.distance)) return '__gateway';
+  }
   const root = view.mode === 'site' ? site.node.root : view.mode === 'gateway' ? gw.root : node.root;
   const hits = ray.intersectObject(root, true);
   for (const h of hits) {
@@ -938,6 +943,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (id === '__gateway') return setMode('gateway');
   select(id);
 });
+addEventListener('rivermon:inspect-gateway', () => setMode('gateway'));
 let lastMove = null;
 renderer.domElement.addEventListener('pointermove', (e) => {
   lastMove = e;

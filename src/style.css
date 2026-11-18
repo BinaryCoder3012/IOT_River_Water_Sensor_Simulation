@@ -199,3 +199,8 @@ body.mode-site #hint { color: #2c3e50; }
   #toolbar { left: 58px; }
   .side-off #side { transform: translateY(calc(100% + 30px)); }
 }
+
+/* clickable gateway label in the site view */
+.lbl-gw { pointer-events: auto; cursor: pointer; transition: background 0.2s, box-shadow 0.2s; }
+.lbl-gw:hover, .lbl-gw:focus-visible { background: rgba(10, 17, 27, 0.95); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45); outline: none; }
+.lbl-gw .gw-cta { margin-left: 8px; padding: 1px 7px; border-radius: 10px; background: #fff; color: #0a111b; font-weight: 600; font-size: 10.5px; }

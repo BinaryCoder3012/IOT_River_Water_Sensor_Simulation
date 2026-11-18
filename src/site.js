@@ -279,7 +279,23 @@ export function buildSite() {
   gwRing.rotation.x = -Math.PI / 2;
   gwRing.position.copy(gateway.root.position).add(new THREE.Vector3(-0.25, 0.03, 0.25));
   root.add(gwRing);
-  const gwl = label('<b>Gateway / receiver</b> · <u>click to inspect</u><br><small>ESP32 + Ra-02 · Wi-Fi bridge · roof, line of sight</small>', 'lbl lbl-site');
+  // generous invisible hit volume so the small rooftop model is easy to click
+  const gwHit = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, 3), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false }));
+  gwHit.position.copy(gateway.root.position).add(new THREE.Vector3(0, 1.0, 0));
+  root.add(gwHit);
+  // the label itself is a real button (labels are otherwise click-through)
+  const gwl = label('<b>Gateway / receiver</b><span class="gw-cta">Inspect ▸</span><br><small>ESP32 + Ra-02 · Wi-Fi bridge · roof, line of sight</small>', 'lbl lbl-site lbl-gw');
+  gwl.element.setAttribute('role', 'button');
+  gwl.element.setAttribute('tabindex', '0');
+  gwl.element.title = 'Open the gateway / receiver view';
+  const openGw = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('rivermon:inspect-gateway'));
+  };
+  gwl.element.addEventListener('click', openGw);
+  gwl.element.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && openGw(e));
+  gwl.element.addEventListener('pointerdown', (e) => e.stopPropagation());
   gwl.position.copy(gwTip).add(new THREE.Vector3(0, 1.2, 0));
   root.add(gwl);
   const cloudPos = gwTip.clone().add(new THREE.Vector3(-4, 9, 0));
@@ -417,5 +433,6 @@ export function buildSite() {
     waterMat.uniforms.uCam.value.copy(camera.position);
   }
 
-  return { root, node, gateway, setStage, ping, transmit, update, sensor, H, state, thrLabels };
+  const gatewayTargets = [gateway.root, gwHit, bld, roof];
+  return { root, node, gateway, gatewayTargets, setStage, ping, transmit, update, sensor, H, state, thrLabels };
 }
